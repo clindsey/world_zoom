@@ -60,15 +60,17 @@
       cursor_y = clamp(cursor_y + vy,zone_manager.world_tile_height);
     };
     self.zoom_in = function(){
+      var old_cursor_x = cursor_x;
       zone_manager.zoom_in(function(dx,dy){
-        cursor_x += dx;
-        cursor_y += dy;
+        cursor_x = ~~(cursor_x * dx);
+        cursor_y = ~~(cursor_y * dy);
       });
     };
     self.zoom_out = function(){
+      var old_cursor_x = cursor_x;
       zone_manager.zoom_out(function(dx,dy){
-        cursor_x -= dx;
-        cursor_y -= dy;
+        cursor_x = ~~(cursor_x * dx);
+        cursor_y = ~~(cursor_y * dy);
       });
     };
     self.render = function(){
@@ -135,7 +137,7 @@
         zoom_factor += 1;
         self.dirty = true;
         init(zoom_factor);
-        callback(self.world_tile_width * (1 / zoom_factor),self.world_tile_height * (1 / zoom_factor));
+        callback(self.world_tile_width / 200,self.world_tile_height / 200);
       }
     };
     self.zoom_out = function(callback){
@@ -143,7 +145,7 @@
         zoom_factor -= 1;
         self.dirty = true;
         init(zoom_factor);
-        callback(self.world_tile_width * (1 / zoom_factor),self.world_tile_height * (1 / zoom_factor));
+        callback(self.world_tile_width / 200,self.world_tile_height / 200);
       }
     };
     self.get_tile = function(x,y,callback){
