@@ -6,7 +6,7 @@
     MainScene(scene);
   });
   var MainScene = function(scene){
-    var zone_manager = ZoneManager(SEED,10,10,3),
+    var zone_manager = ZoneManager(SEED,30,30),
         viewport = Viewport(scene,80,80,14,zone_manager);
     var render_fn = function(){
       viewport.render();
@@ -27,14 +27,18 @@
             speed = 1;
         if(e.keyCode === 37){
           vx -= speed;
+          vy += speed;
         }
         if(e.keyCode === 38){
+          vx -= speed;
           vy -= speed;
         }
         if(e.keyCode === 39){
           vx += speed;
+          vy -= speed;
         }
         if(e.keyCode === 40){
+          vx += speed;
           vy += speed;
         }
         if(e.keyCode === 88){
@@ -50,27 +54,33 @@
   var Viewport = function(scene,width,height,tile_size,zone_manager){
     var self = {},
         map = [],
-        cursor_x = 0,
-        cursor_y = 0,
+        cursor_x = +localStorage['cursor_x'] || 0,
+        cursor_y = +localStorage['cursor_y'] || 0,
         old_cursor_x,
         old_cursor_y,
         bg = Background(scene.width,scene.height,'#DAE8F2');
     self.move_by = function(vx,vy){
       cursor_x = clamp(cursor_x + vx,zone_manager.world_tile_width);
       cursor_y = clamp(cursor_y + vy,zone_manager.world_tile_height);
+      localStorage['cursor_x'] = cursor_x;
+      localStorage['cursor_y'] = cursor_y;
     };
     self.zoom_in = function(){
       var old_cursor_x = cursor_x;
-      zone_manager.zoom_in(function(dx,dy){
-        cursor_x = ~~(cursor_x * dx);
-        cursor_y = ~~(cursor_y * dy);
+      zone_manager.zoom_in(function(old_width,new_width,old_height,new_height){
+        cursor_x = ~~((cursor_x * new_width) / old_width);
+        cursor_y = ~~((cursor_y * new_height) / old_height);
+        localStorage['cursor_x'] = cursor_x;
+        localStorage['cursor_y'] = cursor_y;
       });
     };
     self.zoom_out = function(){
       var old_cursor_x = cursor_x;
-      zone_manager.zoom_out(function(dx,dy){
-        cursor_x = ~~(cursor_x * dx);
-        cursor_y = ~~(cursor_y * dy);
+      zone_manager.zoom_out(function(old_width,new_width,old_height,new_height){
+        cursor_x = ~~((cursor_x * new_width) / old_width);
+        cursor_y = ~~((cursor_y * new_height) / old_height);
+        localStorage['cursor_x'] = cursor_x;
+        localStorage['cursor_y'] = cursor_y;
       });
     };
     self.render = function(){
@@ -97,7 +107,7 @@
               if(map[y][x] === undefined || map[y][x].height !== tile.height){
                 var tile_x = (x - y) * (tile_size / 2) + (scene.width / 2) - (tile_size / 2),
                     tile_y = (x + y) * (tile_size / 4) + (scene.height / 2) - (height * tile_size / 4);
-                map[y][x] = Tile(tile_x,tile_y,tile_size,h,{'background-color':f});
+                map[y][x] = Tile(tile_x,tile_y,tile_size,h,tile.height_step * 2,{'background-color':f});
               }else{
                 map[y][x].style['background-color'] = f;
               }
@@ -112,13 +122,14 @@
     };
     return self;
   };
-  var ZoneManager = function(seed,w,h,zoom_factor){
+  var ZoneManager = function(seed,w,h){
     var self = {},
         zones,
         world_tile_width,
         world_tile_height,
         zone_width,
         zone_height,
+        zoom_factor = +localStorage['zoom_factor'] || 3,
         tile_cache;
     self.world_width = w;
     self.world_height = h;
@@ -134,18 +145,24 @@
     init(zoom_factor);
     self.zoom_in = function(callback){
       if(zoom_factor < 100){
+        var a = self.world_tile_width,
+            b = self.world_tile_height;
         zoom_factor += 1;
+        localStorage['zoom_factor'] = zoom_factor;
         self.dirty = true;
         init(zoom_factor);
-        callback(self.world_tile_width / 200,self.world_tile_height / 200);
+        callback(a,self.world_tile_width,b,self.world_tile_height);
       }
     };
     self.zoom_out = function(callback){
       if(zoom_factor > 3){
+        var a = self.world_tile_width,
+            b = self.world_tile_height;
         zoom_factor -= 1;
+        localStorage['zoom_factor'] = zoom_factor;
         self.dirty = true;
         init(zoom_factor);
-        callback(self.world_tile_width / 200,self.world_tile_height / 200);
+        callback(a,self.world_tile_width,b,self.world_tile_height);
       }
     };
     self.get_tile = function(x,y,callback){
@@ -160,7 +177,7 @@
             local_y = clamped_y % zone_height,
             zone;
         if(zones[zone_x + ',' + zone_y] === undefined){
-          var z = Zone(seed,zone_x,zone_y,zone_width,zone_height,self.world_width,self.world_height);
+          var z = Zone(seed,zone_x,zone_y,zone_width,zone_height,self.world_width,self.world_height,4 + (zoom_factor / 100) * 12);
           zones[zone_x + ',' + zone_y] = z;
         }
         zone = zones[zone_x + ',' + zone_y];
@@ -172,7 +189,7 @@
     };
     return self;
   };
-  var Zone = function(seed,x,y,zone_width,zone_height,world_width,world_height){
+  var Zone = function(seed,x,y,zone_width,zone_height,world_width,world_height,height_step){
     var self = {},
         nw,
         ne,
@@ -203,11 +220,11 @@
         se = ~~(Alea(((y + 1) * ts_width + (x + 1)) + seed)() * 255);
       }
     }
-    self.map = lerp(zone_width,zone_height,nw,ne,sw,se);
+    self.map = lerp(zone_width,zone_height,nw,ne,sw,se,height_step);
     return self;
   };
-  var Tile = function(x,y,size,h,style){
-    var height = 8;
+  var Tile = function(x,y,size,h,ht,style){
+    var height = ht;
     var self = DisplayObject(x,y,size,size / 2 + height - h,style);
     self.add_vertex(size / 2,0 - height - h);
     self.add_vertex(size,size / 4 - height - h);
@@ -295,15 +312,14 @@
   var tween = function(a,b,f){
     return a + f * (b - a);
   };
-  var lerp = function(width,height,nw,ne,sw,se){
+  var lerp = function(width,height,nw,ne,sw,se,height_step){
     var map = [],
         xf,
         yf,
         t,
         b,
         v,
-        x_lookup = [],
-        height_step = 6;
+        x_lookup = [];
     for(var y = 0, x; y < height; y += 1){
       map[y] = [];
       yf = y / height;
@@ -376,14 +392,12 @@
           f = 'rgba(255,255,255,1)';
           h = height_step * 5;
         }
-        /*
         h = ~~(factor * 20);
-        if(h < 4){
-          h = 4;
+        if(h < height_step){
+          h = height_step;
         }
-        */
         //h = 4;
-        map[y][x] = {'height':h,'color':f};
+        map[y][x] = {'height':h,'color':f,'height_step':height_step};
       }
     }
     return map;
